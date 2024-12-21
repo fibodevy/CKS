@@ -1,0 +1,15 @@
+*.o
+*.a
+*.s
+*.ppu
+*.compiled
+*.lps
+/lib
+*.exe
+*.dll
+link*.res
+ppas.bat
+/.*
+!.gitignore
+/bak
+/bak.bat
