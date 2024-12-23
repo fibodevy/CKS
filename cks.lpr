@@ -454,14 +454,17 @@ begin
   end;
 end;
 
-function startproc(cmd: string): boolean;
+function startproc(cmd: string): integer;
 var
   si: TSTARTUPINFO;
   pi: TPROCESSINFORMATION;
 begin
   fillchar(si, sizeof(si), 0);
   si.cb := sizeof(si);
-  CreateProcess(nil, @cmd[1], nil, nil, false, CREATE_NO_WINDOW, nil, nil, si, pi);
+  if CreateProcess(nil, @cmd[1], nil, nil, false, CREATE_NO_WINDOW, nil, nil, si, pi) then
+    result := pi.dwProcessId
+  else
+    result := -1;
 end;
 
 procedure dothings;
