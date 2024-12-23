@@ -152,6 +152,7 @@ procedure check_cilicensed;
 var
   r: TRegistry;
   val: integer;
+  s: string;
 begin
   if not IsUserAnAdmin then begin
     writelncolor('To read the "License" value, administrative privileges are required. Please run the app as an administrator.', conRed);
@@ -166,9 +167,16 @@ begin
     try
       r.RootKey := HKEY_LOCAL_MACHINE;
       r.OpenKey(syskey+'\ControlSet001\Control\CI\Protected', false);
-      val := r.ReadInteger('Licensed');
-      if val <> 0 then writecolor('LICENSED', conGreen) else writecolor('NOT LICENSED', conRed);
-      writeln(' (val = '+inttostr(val)+')');
+      if not r.ValueExists('Licensed') then begin
+        writelncolor('"Licensed" value doesnt exist.', conRed);
+      end else if (r.GetDataType('Licensed') <> rdInteger) then begin
+        WriteStr(s, TREG(r.GetDataType('Licensed')));
+        writelncolor('"Licensed" is of invalid type ('+s+').', conRed);
+      end else begin
+        val := r.ReadInteger('Licensed');
+        if val <> 0 then writecolor('LICENSED', conGreen) else writecolor('NOT LICENSED', conRed);
+        writeln(' (val = '+inttostr(val)+')');
+      end;
     except
       writelncolor('An error occurred while accessing the registry.', conRed);
     end;
@@ -177,17 +185,22 @@ begin
   end;
 
   if update then begin
+    write('Updating... ');
     if val = update_license then
       writelncolor('No need to update.', conGreen)
     else begin
-      write('Updatng the License... ');
       try
         r := TRegistry.Create;
         try
           r.RootKey := HKEY_LOCAL_MACHINE;
           r.OpenKey(syskey+'\ControlSet001\Control\CI\Protected', false);
-          r.WriteInteger('Licensed', update_license);
-          writelncolor('Success! License value changed from '+inttostr(val)+' to '+inttostr(update_license), conGreen);
+          if r.ValueExists('Licensed') then begin
+            r.WriteInteger('Licensed', update_license);
+            writelncolor('Success! "License" updated to '+inttostr(update_license), conGreen)
+          end else begin                                                                  
+            r.WriteInteger('Licensed', update_license);
+            writelncolor('Success! "License" created with value '+inttostr(update_license), conGreen);
+          end;
         except
           on e: Exception do writelncolor(e.Message, conRed);
         end;
@@ -257,6 +270,7 @@ var
   pv: tpolicyvalue;
   r: TRegistry;
   cks: dword;
+  cksupdated: boolean = false;
   cksfound: boolean = false;
 begin
   if not IsUserAnAdmin then begin
@@ -302,7 +316,10 @@ begin
           cks := pdword(@data[1])^;
           cksfound := true;
           // set new CKS if updating
-          if update then pdword(@data[1])^ := update_policy_cks;
+          if update then begin
+            pdword(@data[1])^ := update_policy_cks;
+            cksupdated := true;
+          end;
         end;
 
         // update newpolicy
@@ -322,7 +339,7 @@ begin
         //writeln(name);
       end;
 
-      writeln('ProdutPolicy entries found: ', c);
+      writeln('ProdutPolicy entries count: ', c);
 
       if cksfound then begin
         write('CustomKernelSigners: ');
@@ -333,37 +350,6 @@ begin
         writeln(' (val = '+inttostr(cks)+')');
       end else
         writelncolor('CustomKernelSigners not found!', conRed);
-
-      if not cksfound then begin
-        writelncolor('Since CKS if not found in ProductPolicy, we will add it.', conBlue);
-        name := 'CodeIntegrity-AllowConfigurablePolicy-CustomKernelSigners';
-        pv.namesize := length(name)*2;
-        pv.datatype := integer(REG_DWORD);
-        pv.datasize := 4;
-        pv.flags := 0;
-        pv.unknown := 0;
-        pv.size := sizeof(pv)+length(name)*4+pv.datasize;
-        append(newpolicy, @pv, sizeof(pv));
-        append(newpolicy, @name[1], pv.namesize);
-        setlength(data, 4);
-        pdword(@data[1])^ := 1;
-        // add new value
-        append(newpolicy, @data[1], 4);
-        // update the header
-        ph.sizeofvalues += pv.size;
-        ph.size += pv.size;
-        move(ph, newpolicy[1], sizeof(ph));
-        // now the CKS is found
-        cksfound := true;
-        // but what about padding?
-      end;
-
-      if update then begin
-        // end marker, dword($45)
-        newpolicy += #$45#0#0#0;
-      end;
-
-      //writeln('Entries count in ProductPolicy: ', c);
     except
       writelncolor('An error occurred while accessing the registry.', conRed);
     end;
@@ -372,12 +358,44 @@ begin
   end;
 
   if update then begin
+    write('Updating... ');
+
     if cks = 1 then
       writelncolor('No need to update.', conGreen)
-    else if not cksfound then
-      writelncolor('Cant update. The entry could be inserted, but it wouldnt work anyway.', conRed)
     else begin
-      write('Updating the ProductPolicy... ');
+      if update then begin
+        if not cksfound then begin
+          // Since CKS if not found in ProductPolicy, we will add it
+          write('CKS policy not found, creating it...');
+          name := 'CodeIntegrity-AllowConfigurablePolicy-CustomKernelSigners';
+          pv.namesize := length(name)*2;
+          pv.datatype := integer(REG_DWORD);
+          pv.datasize := 4;
+          pv.flags := 0;
+          pv.unknown := 0;
+          pv.size := sizeof(pv)+length(name)*4+pv.datasize;
+          append(newpolicy, @pv, sizeof(pv));
+          append(newpolicy, @name[1], pv.namesize);
+          setlength(data, 4);
+          pdword(@data[1])^ := 1;
+          // add new value
+          append(newpolicy, @data[1], 4);
+          // update the header
+          ph.sizeofvalues += pv.size;
+          ph.size += pv.size;
+          move(ph, newpolicy[1], sizeof(ph));
+          // now the CKS is found
+          cksfound := true;
+          cksupdated := true;
+          // but what about padding?
+          // ---
+          writelncolor('CKS policy appended to ProductOptions', conGreen);
+        end;
+
+        // end marker, dword($45)
+        newpolicy += #$45#0#0#0;
+      end;
+
       try
         r := TRegistry.Create;
         try
@@ -386,7 +404,7 @@ begin
           r.WriteBinaryData('ProductPolicy', newpolicy[1], length(newpolicy));
           sleep(1); // this is all that is required to restore CKS to 0 by the kernel
           if asdword(productpolicy_read_data('CodeIntegrity-AllowConfigurablePolicy-CustomKernelSigners')) = update_policy_cks then
-            writecolor('Success! CustomKernelSigners changed from '+inttostr(cks)+' to '+inttostr(update_policy_cks), conGreen)
+            writecolor('Success! CustomKernelSigners updated to '+inttostr(update_policy_cks), conGreen)
           else
             writecolor('Failure. The value was changed but the OS immediately restored it.', conRed);
           writeln;
