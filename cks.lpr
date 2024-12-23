@@ -1,7 +1,7 @@
 // Copyright (c) 2024 fibodevy https://github.com/fibodevy
 // License: MIT
 
-program ckscheck;
+program CKS;
 
 uses SysUtils, Classes, Registry, Windows;
 
@@ -48,6 +48,7 @@ var
   updateandclose: boolean = false;
   update_license: integer = 1;
   update_policy_cks: integer = 1;
+  liveosmode: boolean = false;
 
 // REF
 // https://www.geoffchappell.com/studies/windows/km/ntoskrnl/api/ex/slmem/productpolicy.htm
@@ -366,7 +367,7 @@ begin
       if update then begin
         if not cksfound then begin
           // Since CKS if not found in ProductPolicy, we will add it
-          write('CKS policy not found, creating it...');
+          write('CKS policy not found, creating it... ');
           name := 'CodeIntegrity-AllowConfigurablePolicy-CustomKernelSigners';
           pv.namesize := length(name)*2;
           pv.datatype := integer(REG_DWORD);
@@ -441,6 +442,28 @@ begin
   SetConsoleTextAttribute(StdOutputHandle, conWhite);
 end;
 
+function flushbuffers: boolean;
+var
+  h: hwnd;
+begin
+  result := false;
+  h := CreateFile('\\.\C:', GENERIC_READ or GENERIC_WRITE, FILE_SHARE_READ or FILE_SHARE_WRITE, nil, OPEN_EXISTING, 0, 0);
+  if h <> INVALID_HANDLE_VALUE then begin
+    result := FlushFileBuffers(h);
+    CloseHandle(h);
+  end;
+end;
+
+function startproc(cmd: string): boolean;
+var
+  si: TSTARTUPINFO;
+  pi: TPROCESSINFORMATION;
+begin
+  fillchar(si, sizeof(si), 0);
+  si.cb := sizeof(si);
+  CreateProcess(nil, @cmd[1], nil, nil, false, CREATE_NO_WINDOW, nil, nil, si, pi);
+end;
+
 procedure dothings;
 begin
   if update then begin
@@ -456,6 +479,14 @@ begin
 
   check_productpolicy;
   writeln;
+
+  if liveosmode then begin
+    writelncolor('Live OS mode: unloading the temp hive to make sure all changes fluhed to the disk.', conBlue);
+    startproc('reg unload HKLM\'+syskey);
+    sleep(500);
+    write('Flushing disk buffers... ');
+    if flushbuffers then writelncolor('OK!', conGreen) else writeln('Fail.', conRed);
+  end;
 end;
 
 procedure printhelp;
@@ -467,16 +498,36 @@ begin
   writelncolor('   This way you can edit the registry of another Windows installation by loading its hive file to HKLM.', conWhite);
 end;
 
+procedure liveos;
 begin
-  if ParamStr(1) = 'update' then begin
-    update := true;
-    updateandclose := true;
-  end;
+  writelncolor('Live OS mode: loading SYSTEM hive file!', conBlue);
+  syskey := 'temphive';
+  startproc('reg load HKLM\'+syskey+' C:\Windows\System32\config\SYSTEM');
+  update := true;
+  liveosmode := true;
+  sleep(500);
+end;
 
-  if ParamStr(2) <> '' then begin
-    syskey := ParamStr(2);
-    writelncolor('Using registry key "'+syskey+'" instead of "SYSTEM".', conBlue);
-    writeln;
+begin
+  if (ParamStr(1) = 'liveos') or ((SysUtils.GetEnvironmentVariable('USERNAME') = 'SYSTEM') and (SysUtils.GetEnvironmentVariable('USERPROFILE') = 'X:\Users\Default')) then begin
+    if not IsUserAnAdmin then begin
+      writelncolor('Live OS mode: run as admin!', conRed);
+      readln;
+      exit;
+    end;
+
+    liveos;
+  end else begin
+    if ParamStr(1) = 'update' then begin
+      update := true;
+      updateandclose := true;
+    end;
+
+    if ParamStr(2) <> '' then begin
+      syskey := ParamStr(2);
+      writelncolor('Using registry key "'+syskey+'" instead of "SYSTEM".', conBlue);
+      writeln;
+    end;
   end;
 
   dothings;
@@ -499,7 +550,7 @@ begin
     exit;
   end;
 
-  printhelp;
+  if not update then printhelp;
 
   readln;
 end.
