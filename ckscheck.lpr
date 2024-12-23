@@ -317,6 +317,9 @@ begin
             dec(pad);
           end;
         end;
+
+        // print policy
+        //writeln(name);
       end;
 
       writeln('ProdutPolicy entries found: ', c);
@@ -330,6 +333,30 @@ begin
         writeln(' (val = '+inttostr(cks)+')');
       end else
         writelncolor('CustomKernelSigners not found!', conRed);
+
+      if not cksfound then begin
+        writelncolor('Since CKS if not found in ProductPolicy, we will add it.', conBlue);
+        name := 'CodeIntegrity-AllowConfigurablePolicy-CustomKernelSigners';
+        pv.namesize := length(name)*2;
+        pv.datatype := integer(REG_DWORD);
+        pv.datasize := 4;
+        pv.flags := 0;
+        pv.unknown := 0;
+        pv.size := sizeof(pv)+length(name)*4+pv.datasize;
+        append(newpolicy, @pv, sizeof(pv));
+        append(newpolicy, @name[1], pv.namesize);
+        setlength(data, 4);
+        pdword(@data[1])^ := 1;
+        // add new value
+        append(newpolicy, @data[1], 4);
+        // update the header
+        ph.sizeofvalues += pv.size;
+        ph.size += pv.size;
+        move(ph, newpolicy[1], sizeof(ph));
+        // now the CKS is found
+        cksfound := true;
+        // but what about padding?
+      end;
 
       if update then begin
         // end marker, dword($45)
@@ -369,6 +396,13 @@ begin
       finally
         r.Free;
       end;
+
+      // dump newpolicy
+      //with TMemoryStream.Create do begin
+      //  Write(newpolicy[1], length(newpolicy));
+      //  SaveToFile('newpolicy.txt');
+      //  Free;
+      //end;
     end;
   end;
 end;
