@@ -316,6 +316,7 @@ begin
         if name = 'CodeIntegrity-AllowConfigurablePolicy-CustomKernelSigners' then begin
           cks := pdword(@data[1])^;
           cksfound := true;
+          writeln('CustomKernelSigners found, flags: ', pv.flags, ', unknown: ', pv.unknown);
           // set new CKS if updating
           if update then begin
             pdword(@data[1])^ := update_policy_cks;
@@ -390,7 +391,7 @@ begin
           cksupdated := true;
           // but what about padding?
           // ---
-          writelncolor('CKS policy appended to ProductOptions', conGreen);
+          writelncolor('CKS policy appended to ProductOptions.', conGreen);
         end;
 
         // end marker, dword($45)
@@ -508,11 +509,12 @@ begin
   startproc('reg load HKLM\'+syskey+' C:\Windows\System32\config\SYSTEM');
   update := true;
   liveosmode := true;
-  sleep(500);
+  sleep(1000);
+  // TODO: wait until hive loaded
 end;
 
 begin
-  if (ParamStr(1) = 'liveos') or ((SysUtils.GetEnvironmentVariable('USERNAME') = 'SYSTEM') and (SysUtils.GetEnvironmentVariable('USERPROFILE') = 'X:\Users\Default')) then begin
+  if (ParamStr(1) = 'liveos') or ((SysUtils.GetEnvironmentVariable('USERNAME') = 'SYSTEM') and (SysUtils.GetEnvironmentVariable('USERPROFILE').StartsWith('X:\'))) then begin
     if not IsUserAnAdmin then begin
       writelncolor('Live OS mode: run as admin!', conRed);
       readln;
