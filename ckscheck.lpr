@@ -391,16 +391,8 @@ end;
 
 procedure dothings;
 begin
-  if not updateandclose then clearconsole;
-
   if update then begin
     writelncolor('Updating the License and CustomKernelSigners entry in ProductPolicy...', conBlue);
-
-    if ParamStr(2) <> '' then begin
-      syskey := ParamStr(2);
-      writelncolor('Using registry key "'+syskey+'" instead of "SYSTEM".', conBlue);
-    end;
-
     writeln;
   end;
 
@@ -416,18 +408,23 @@ end;
 
 procedure printhelp;
 begin
-  writelncolor('1) Run "ckscheck check" to run only check without applying any updates.', conWhite);
-  writelncolor('2) Run "ckscheck update" to apply updates and exit the app without waiting for user interaction.', conWhite);
-  writelncolor('3) Run "ckscheck update myhive" to make changes to the registry hive named "myhive" instead of "SYSTEM".', conWhite);
-  writelncolor('   This way you can edit the registry of another Windows installation.', conGray);
-  writelncolor('   On another Windows installation, or a live Windows such as HBCD, start regedit, select HKEY_LOCAL_MACHINE,', conGray);
-  writelncolor('   then click File -> Load Hive and select "C:\Windows\System32\config\SYSTEM".', conGray);
+  writelncolor('1) Run "ckscheck check" to only read without applying any updates.', conWhite);
+  writelncolor('2) Run "ckscheck check myhive" to read values from "HKLM\myhive" instead of "HKLM\SYSTEM"', conWhite);
+  writelncolor('3) Run "ckscheck update" to apply updates and exit the app without waiting for user interaction.', conWhite);
+  writelncolor('4) Run "ckscheck update myhive" to make changes to "HKLM\myhive" instead of "HKLM\SYSTEM".', conWhite);
+  writelncolor('   This way you can edit the registry of another Windows installation by loading its hive file to HKLM.', conWhite);
 end;
 
 begin
   if ParamStr(1) = 'update' then begin
     update := true;
     updateandclose := true;
+  end;
+
+  if ParamStr(2) <> '' then begin
+    syskey := ParamStr(2);
+    writelncolor('Using registry key "'+syskey+'" instead of "SYSTEM".', conBlue);
+    writeln;
   end;
 
   dothings;
@@ -443,6 +440,7 @@ begin
     writelncolor('Press <enter> to update the License and ProductPolicy...', conBlue);
     readln;
     update := true;
+    clearconsole;
     dothings;   
     writelncolor('Done. Press <enter> to close.', conBlue);
     readln;
